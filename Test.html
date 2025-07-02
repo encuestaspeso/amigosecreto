@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sorteo Amigo Secreto</title>
+  <!-- EmailJS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  <script>
+    /* ===============================
+       CONFIGURACIÓN (pon tus IDs reales)
+       =============================== */
+    const EMAILJS_PUBLIC_KEY = "zrrCFqd2HeIsPvzfX";
+    const EMAILJS_SERVICE_ID = "service_9epv8tu";
+    const EMAILJS_TEMPLATE_ID = "template_otx8fjn";
+
+    (function () { emailjs.init(EMAILJS_PUBLIC_KEY); })();
+
+    /* ===============================
+       UTILIDADES
+       =============================== */
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    function getParticipants() {
+      const rows = document.querySelectorAll('.participant-row');
+      const parts = [];
+      rows.forEach(row => {
+        const name = row.querySelector('.name').value.trim();
+        const email = row.querySelector('.email').value.trim();
+        if (name || email) {
+          if (!name || !email) throw new Error('Completa nombre y correo en todas las filas.');
+          parts.push({ name, email });
+        }
+      });
+      if (parts.length < 3) throw new Error('Al menos 3 participantes.');
+      return parts;
+    }
+
+    function generatePairs(participants, maxTries = 10000) {
+      const n = participants.length;
+      let receivers;
+      for (let t = 0; t < maxTries; t++) {
+        receivers = [...participants];
+        shuffle(receivers);
+        if (participants.some((p, i) => p.email === receivers[i].email)) continue;
+        let bad = false;
+        for (let i = 0; i < n; i++) {
+          const j = participants.findIndex(p => p.email === receivers[i].email);
+          if (receivers[j] && receivers[j].email === participants[i].email) { bad = true; break; }
+        }
+        if (bad) continue;
+        return receivers;
+      }
+      throw new Error('No se pudo generar una asignación válida. Intenta de nuevo.');
+    }
+
+    /* ===============================
+       DOM helpers
+       =============================== */
+    function addRow(name = '', email = '') {
+      const container = document.getElementById('participants');
+      const row = document.createElement('div');
+      row.className = 'participant-row';
+      row.innerHTML = `
+        <input type="text" class="name" placeholder="Nombre" value="${name}" />
+        <input type="email" class="email" placeholder="correo@example.com" value="${email}" />
+        <button type="button" class="remove" title="Eliminar">🗑️</button>`;
+      row.querySelector('.remove').onclick = () => { row.remove(); };
+      container.appendChild(row);
+    }
+
+    /* ===============================
+       LÓGICA PRINCIPAL
+       =============================== */
+    async function handleDraw() {
+      let participants;
+      try {
+        participants = getParticipants();
+      } catch (e) {
+        alert('⚠️ ' + e.message);
+        return;
+      }
+      try {
+        const receivers = generatePairs(participants);
+        await Promise.all(
+          participants.map((giver, idx) =>
+            emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+              to_email: giver.email,
+              friend_name: receivers[idx].name,
+            })
+          )
+        );
+        alert('✔️ Correos enviados. ¡Sorteo completado!');
+        document.getElementById('participants').innerHTML = '';
+        for (let i = 0; i < 3; i++) addRow();
+      } catch (err) {
+        console.error(err);
+        alert('⚠️ ' + err.message);
+      }
+    }
+
+    // Agrega tres filas iniciales al cargar
+    window.onload = () => { for (let i = 0; i < 3; i++) addRow(); };
+  </script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      max-width: 700px;
+      margin: 2rem auto;
+      padding: 1rem;
+    }
+    h1 { font-size: 1.9rem; margin-bottom: 1rem; }
+    #participants { display: flex; flex-direction: column; gap: 0.5rem; }
+    .participant-row { display: flex; gap: 0.5rem; }
+    .participant-row input { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 0.4rem; font-size: 0.9rem; }
+    .participant-row .remove { background: #ef4444; color: #fff; border: none; padding: 0 0.75rem; border-radius: 0.4rem; cursor: pointer; }
+    .participant-row .remove:hover { background: #dc2626; }
+    #add-btn, #draw-btn { margin-top: 1rem; padding: 0.75rem 1.5rem; font-size: 1rem; border: none; border-radius: 0.5rem; cursor: pointer; }
+    #add-btn { background: #10b981; color: #fff; margin-right: 0.5rem; }
+    #add-btn:hover { background: #059669; }
+    #draw-btn { background: #2563eb; color: #fff; }
+    #draw-btn:hover { background: #1d4ed8; }
+    .note { margin-top: 1rem; font-size: 0.85rem; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Sorteo Amigo Secreto</h1>
+
+  <div id="participants"></div>
+  <button id="add-btn" type="button" onclick="addRow()">+ Añadir participante</button>
+  <button id="draw-btn" onclick="handleDraw()">Sortear y Enviar</button>
+
+  <p class="note">
+    Ejecuta este archivo desde <code>http://localhost</code> (o tu dominio) y asegúrate de que tu plantilla de EmailJS
+    tenga las variables <code>{{to_email}}</code> y <code>{{friend_name}}</code>. No funcionará si lo abres como
+    <code>file://</code>.
+  </p>
+</body>
+</html>
